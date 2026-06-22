@@ -1,0 +1,7 @@
+material_id,formula,energy_above_hull,band_gap,density,space_group,volume,num_sites,is_metallic
+gnome-LaH10,LaH10,0.03,0.0,5.8,225,118.0,11,true
+gnome-MgB2,MgB2,0.01,0.0,2.6,191,29.0,3,true
+gnome-YBCO,YBa2Cu3O7,0.04,0.1,6.3,123,170.0,13,true
+gnome-FeSe,FeSe,0.06,0.0,5.7,129,78.0,2,true
+gnome-SiO2,SiO2,0.00,5.5,2.7,154,45.0,3,false
+gnome-UO2,UO2,0.01,1.8,10.9,225,41.0,3,false

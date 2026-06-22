@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crys-jepa-gnome-sc"
+version = "0.1.0"
+description = "MVP pipeline for ranking GNoME crystal candidates for superconductivity."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "Crys-JEPA-GNoME-SC contributors" }]
+dependencies = []
+
+[project.scripts]
+crys-jepa-gnome-sc = "crys_jepa_gnome_sc.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+filterwarnings = [
+  "ignore:The configuration option \"asyncio_default_fixture_loop_scope\" is unset:pytest.PytestDeprecationWarning"
+]
