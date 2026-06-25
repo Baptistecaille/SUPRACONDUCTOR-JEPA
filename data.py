@@ -231,7 +231,7 @@ def make_dataloaders(
     val_ds = _subset(val_idx, None)
     test_ds = _subset(test_idx, None)
 
-    train_dl = DataLoader(train_ds, batch_size=config.batch_size_pretrain, shuffle=True,  num_workers=4)
+    train_dl = DataLoader(train_ds, batch_size=config.batch_size_pretrain, shuffle=True,  num_workers=2)
     val_dl   = DataLoader(val_ds,   batch_size=config.batch_size_finetune, shuffle=False, num_workers=2)
     test_dl  = DataLoader(test_ds,  batch_size=config.batch_size_finetune, shuffle=False, num_workers=2)
 
