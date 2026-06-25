@@ -1,25 +1,19 @@
-[build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
-
 [project]
-name = "crys-jepa-gnome-sc"
+name = "supra-jepa"
 version = "0.1.0"
-description = "MVP pipeline for ranking GNoME crystal candidates for superconductivity."
+description = "JEPA-based superconductor classifier on crystal token sequences"
 readme = "README.md"
-requires-python = ">=3.9"
-authors = [{ name = "Crys-JEPA-GNoME-SC contributors" }]
-dependencies = []
+requires-python = ">=3.11"
+dependencies = [
+    "matminer",
+    "mp-api",
+    "pymatgen",
+    "spglib",
+    "torch",
+    "scikit-learn",
+]
 
 [project.scripts]
-crys-jepa-gnome-sc = "crys_jepa_gnome_sc.cli:main"
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.pytest.ini_options]
-pythonpath = ["src"]
-testpaths = ["tests"]
-filterwarnings = [
-  "ignore:The configuration option \"asyncio_default_fixture_loop_scope\" is unset:pytest.PytestDeprecationWarning"
-]
+prepare-data = "scripts.prepare_data:main"
+pretrain     = "pretrain:main"
+finetune     = "finetune:main"
