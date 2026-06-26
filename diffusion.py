@@ -39,6 +39,16 @@ def diffusion_shape(cfg: Config) -> DiffusionShape:
     return DiffusionShape(n_global=7, n_site_features=6, n_sites=cfg.max_atoms)
 
 
+def _to_diffusion_range(x: torch.Tensor) -> torch.Tensor:
+    """Mappe les features bornées [0, 1] vers [-1, 1] pour le DDPM."""
+    return x * 2.0 - 1.0
+
+
+def _from_diffusion_range(x: torch.Tensor) -> torch.Tensor:
+    """Ramène les samples DDPM vers l'intervalle feature [0, 1]."""
+    return ((x.clamp(-1.0, 1.0) + 1.0) * 0.5).clamp(0.0, 1.0)
+
+
 def batch_to_diffusion_vector(batch: dict, cfg: Config) -> torch.Tensor:
     """Convertit un batch tokenisé JEPA en vecteur continu pour le DDPM."""
     element = batch["element_ids"][:, 1:].float() / (cfg.n_elements - 1)
@@ -62,7 +72,8 @@ def batch_to_diffusion_vector(batch: dict, cfg: Config) -> torch.Tensor:
         ],
         dim=-1,
     )
-    return torch.cat([global_feat, sites.flatten(1)], dim=-1)
+    features = torch.cat([global_feat, sites.flatten(1)], dim=-1)
+    return _to_diffusion_range(features)
 
 
 def diffusion_vector_to_batch(
@@ -78,8 +89,9 @@ def diffusion_vector_to_batch(
     B = vector.shape[0]
     device = vector.device
 
-    global_feat = vector[:, : shape.n_global]
-    site_feat = vector[:, shape.n_global :].reshape(B, shape.n_sites, shape.n_site_features)
+    features = _from_diffusion_range(vector)
+    global_feat = features[:, : shape.n_global]
+    site_feat = features[:, shape.n_global :].reshape(B, shape.n_sites, shape.n_site_features)
 
     sg_id = torch.round(global_feat[:, 0].clamp(1 / 230, 1.0) * (cfg.n_space_groups - 1)).long()
     sg_id = sg_id.clamp(1, cfg.n_space_groups - 1)

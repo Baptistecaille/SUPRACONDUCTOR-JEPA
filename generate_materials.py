@@ -24,6 +24,12 @@ IDX_TO_WYCKOFF = {idx + 1: letter for idx, letter in enumerate("abcdefghijklmnop
 def load_diffusion(cfg: Config, device: torch.device) -> CrystalDDPM:
     model = CrystalDDPM(cfg).to(device)
     checkpoint = torch.load(cfg.checkpoint_diffusion, map_location=device)
+    if isinstance(checkpoint, dict) and checkpoint.get("representation") != "bounded_features_v2":
+        print(
+            "Attention: ce checkpoint diffusion utilise peut-etre une ancienne "
+            "representation. Re-entraine train_diffusion.py si les candidats "
+            "saturent vers H/Og, coordonnees 0/1 ou mailles extremes."
+        )
     state = checkpoint["model"] if isinstance(checkpoint, dict) and "model" in checkpoint else checkpoint
     model.load_state_dict(state)
     model.eval()

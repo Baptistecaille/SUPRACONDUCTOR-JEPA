@@ -58,6 +58,7 @@ def train_diffusion(
                     "model": model.state_dict(),
                     "config": cfg.__dict__,
                     "best_loss": best_loss,
+                    "representation": "bounded_features_v2",
                 },
                 cfg.checkpoint_diffusion,
             )
