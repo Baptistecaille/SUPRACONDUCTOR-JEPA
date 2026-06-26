@@ -59,6 +59,17 @@ def _quantile_lookup(values: torch.Tensor, probs: torch.Tensor) -> torch.Tensor:
     return sorted_values[idx]
 
 
+def _quantile_lookup_rows(rows: torch.Tensor, probs: torch.Tensor, sort_col: int = 0) -> torch.Tensor:
+    """Sélectionne des lignes empiriques complètes en conservant leurs corrélations."""
+    rows = rows.to(probs.device).float()
+    if rows.shape[0] == 0:
+        raise ValueError("Cannot decode from empty empirical rows.")
+    order = torch.argsort(rows[:, sort_col])
+    sorted_rows = rows[order]
+    idx = torch.round(probs.clamp(0.0, 1.0) * (sorted_rows.shape[0] - 1)).long()
+    return sorted_rows[idx]
+
+
 @torch.no_grad()
 def collect_diffusion_metadata(loader, cfg: Config, device: torch.device | None = None) -> dict:
     """Collecte les distributions empiriques utilisées pour décoder les samples.
@@ -69,25 +80,35 @@ def collect_diffusion_metadata(loader, cfg: Config, device: torch.device | None 
     arrondi ordinal qui favorise artificiellement H/Og et a/z.
     """
     device = device or torch.device("cpu")
-    elements, wyckoffs, space_groups, lattices, atom_counts = [], [], [], [], []
+    elements, wyckoffs, space_groups, lattices, atom_counts, coords = [], [], [], [], [], []
 
     for batch in loader:
         batch = {k: v.to(device) for k, v in batch.items()}
         valid = batch["padding_mask"][:, 1:]
         elements.append(batch["element_ids"][:, 1:][valid].detach().cpu())
         wyckoffs.append(batch["wyckoff_ids"][:, 1:][valid].detach().cpu())
+        coords.append(batch["frac_coords"][:, 1:][valid].detach().cpu())
         space_groups.append(batch["sg_id"].detach().cpu())
         lattices.append(batch["lattice_feat"].detach().cpu())
         atom_counts.append(valid.sum(dim=1).detach().cpu())
 
     lattice_feat = torch.cat(lattices, dim=0)
+    sg = torch.cat(space_groups).long()
+    counts = torch.cat(atom_counts).long().clamp(1, cfg.max_atoms)
+    # Une ligne globale garde ensemble groupe d'espace, maille et nombre de sites.
+    global_rows = torch.cat(
+        [sg.float().unsqueeze(1), lattice_feat.float(), counts.float().unsqueeze(1)],
+        dim=1,
+    )
     return {
-        "representation": "bounded_features_v3_empirical_decode",
+        "representation": "bounded_features_v4_correlated_decode",
         "element_ids": torch.cat(elements).long(),
         "wyckoff_ids": torch.cat(wyckoffs).long(),
-        "space_groups": torch.cat(space_groups).long(),
+        "frac_coords": torch.cat(coords).float(),
+        "space_groups": sg,
         "lattice_feat": lattice_feat.float(),
-        "atom_counts": torch.cat(atom_counts).long().clamp(1, cfg.max_atoms),
+        "atom_counts": counts,
+        "global_rows": global_rows.float(),
     }
 
 
@@ -136,13 +157,25 @@ def diffusion_vector_to_batch(
     global_feat = features[:, : shape.n_global]
     site_feat = features[:, shape.n_global :].reshape(B, shape.n_sites, shape.n_site_features)
 
-    if metadata is not None and "space_groups" in metadata:
+    if metadata is not None and "global_rows" in metadata:
+        # Score global unique : on trie les prototypes par groupe d'espace,
+        # puis on sélectionne une ligne réelle (SG, maille, n_sites).
+        global_prob = global_feat.mean(dim=1)
+        global_rows = _quantile_lookup_rows(metadata["global_rows"], global_prob, sort_col=0)
+        sg_id = global_rows[:, 0].long()
+        lattice_feat = global_rows[:, 1:7].to(vector.dtype)
+        empirical_atom_counts = global_rows[:, 7].long().clamp(min_atoms, cfg.max_atoms)
+    elif metadata is not None and "space_groups" in metadata:
         sg_id = _quantile_lookup(metadata["space_groups"], global_feat[:, 0]).long()
+        empirical_atom_counts = None
     else:
         sg_id = torch.round(global_feat[:, 0].clamp(1 / 230, 1.0) * (cfg.n_space_groups - 1)).long()
         sg_id = sg_id.clamp(1, cfg.n_space_groups - 1)
+        empirical_atom_counts = None
 
-    if metadata is not None and "lattice_feat" in metadata:
+    if metadata is not None and "global_rows" in metadata:
+        pass
+    elif metadata is not None and "lattice_feat" in metadata:
         lattice_values = metadata["lattice_feat"].to(device)
         lattice_feat = torch.stack(
             [
@@ -157,7 +190,13 @@ def diffusion_vector_to_batch(
         lattice_feat[:, 3:] = lattice_feat[:, 3:].clamp(0.15, 1.0)
 
     presence_score = site_feat[:, :, 5]
-    if metadata is not None and "atom_counts" in metadata:
+    if empirical_atom_counts is not None:
+        atom_counts = empirical_atom_counts
+        padding_atoms = torch.zeros(B, cfg.max_atoms, dtype=torch.bool, device=device)
+        for row, n_atoms in enumerate(atom_counts.tolist()):
+            topk = torch.topk(presence_score[row], k=max(1, n_atoms)).indices
+            padding_atoms[row, topk] = True
+    elif metadata is not None and "atom_counts" in metadata:
         count_prob = presence_score.mean(dim=1)
         atom_counts = _quantile_lookup(metadata["atom_counts"], count_prob).long()
         atom_counts = atom_counts.clamp(min_atoms, cfg.max_atoms)
@@ -182,7 +221,17 @@ def diffusion_vector_to_batch(
     else:
         wyckoff_atoms = torch.round(site_feat[:, :, 1].clamp(1 / 26, 1.0) * (cfg.n_wyckoff - 1)).long()
         wyckoff_atoms = wyckoff_atoms.clamp(1, cfg.n_wyckoff - 1)
-    coords_atoms = site_feat[:, :, 2:5].clamp(0.0, 1.0)
+    if metadata is not None and "frac_coords" in metadata:
+        coord_values = metadata["frac_coords"].to(device)
+        coords_atoms = torch.stack(
+            [
+                _quantile_lookup(coord_values[:, j], site_feat[:, :, j + 2])
+                for j in range(3)
+            ],
+            dim=-1,
+        ).to(vector.dtype)
+    else:
+        coords_atoms = site_feat[:, :, 2:5].clamp(0.0, 1.0)
 
     element_ids = torch.zeros(B, cfg.max_atoms + 1, dtype=torch.long, device=device)
     wyckoff_ids = torch.zeros(B, cfg.max_atoms + 1, dtype=torch.long, device=device)

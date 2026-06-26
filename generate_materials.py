@@ -10,7 +10,7 @@ import json
 import os
 
 import torch
-from pymatgen.core import Element
+from pymatgen.core import Element, Lattice, Structure
 
 from config import Config
 from diffusion import CrystalDDPM, diffusion_vector_to_batch
@@ -31,10 +31,10 @@ def load_diffusion(
     metadata = checkpoint.get("metadata") if isinstance(checkpoint, dict) else None
     if metadata is None or (
         isinstance(checkpoint, dict)
-        and checkpoint.get("representation") != "bounded_features_v3_empirical_decode"
+        and checkpoint.get("representation") != "bounded_features_v4_correlated_decode"
     ):
         message = (
-            "Ce checkpoint diffusion ne contient pas le decodeur empirique v3. "
+            "Ce checkpoint diffusion ne contient pas le decodeur empirique correle v4. "
             "Re-entraine train_diffusion.py pour eviter les candidats artificiels "
             "du type H/Og, coordonnees 0/1 ou mailles extremes."
         )
@@ -101,6 +101,57 @@ def candidate_to_record(batch: dict, probs: torch.Tensor, idx: int) -> dict:
     }
 
 
+def plausibility_issues(record: dict, min_distance: float = 0.7) -> list[str]:
+    """Retourne les raisons de rejet géométrique/chimique les plus évidentes."""
+    issues = []
+    lattice = record["lattice"]
+    lengths = [lattice["a"], lattice["b"], lattice["c"]]
+    angles = [lattice["alpha"], lattice["beta"], lattice["gamma"]]
+
+    if any(x <= 0.5 or x >= 60.0 for x in lengths):
+        issues.append("lattice_length_out_of_range")
+    if any(x <= 20.0 or x >= 175.0 for x in angles):
+        issues.append("lattice_angle_out_of_range")
+    if record["n_sites"] < 1:
+        issues.append("empty_structure")
+        return issues
+
+    species = [site["element"] for site in record["sites"]]
+    frac_coords = [site["frac_coords"] for site in record["sites"]]
+
+    rounded_sites = {
+        (species[i], tuple(round(float(v) % 1.0, 4) for v in frac_coords[i]))
+        for i in range(len(species))
+    }
+    if len(rounded_sites) < len(species):
+        issues.append("duplicate_sites")
+
+    try:
+        structure = Structure(
+            Lattice.from_parameters(
+                lattice["a"],
+                lattice["b"],
+                lattice["c"],
+                lattice["alpha"],
+                lattice["beta"],
+                lattice["gamma"],
+            ),
+            species,
+            frac_coords,
+            coords_are_cartesian=False,
+            to_unit_cell=True,
+        )
+        if len(structure) > 1:
+            distances = structure.distance_matrix
+            distances[distances == 0.0] = float("inf")
+            if float(distances.min()) < min_distance:
+                issues.append("too_short_interatomic_distance")
+    except Exception as exc:
+        issues.append(f"pymatgen_invalid:{type(exc).__name__}")
+
+    return issues
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--n-samples", type=int, default=64)
@@ -109,6 +160,8 @@ def main():
     parser.add_argument("--diffusion-checkpoint", type=str, default=None)
     parser.add_argument("--jepa-checkpoint", type=str, default=None)
     parser.add_argument("--allow-legacy-decode", action="store_true")
+    parser.add_argument("--no-validity-filter", action="store_true")
+    parser.add_argument("--min-distance", type=float, default=0.7)
     parser.add_argument("--out", type=str, default="generated_candidates.json")
     args = parser.parse_args()
 
@@ -129,14 +182,26 @@ def main():
     batch = {k: v.to(device) for k, v in batch.items()}
     probs = score_candidates(jepa, batch)
 
-    order = torch.argsort(probs, descending=True)
-    keep = order[: min(args.top_k, args.n_samples)].tolist()
-    records = [candidate_to_record(batch, probs, idx) for idx in keep]
+    order = torch.argsort(probs, descending=True).tolist()
+    records = []
+    rejected = 0
+    for idx in order:
+        record = candidate_to_record(batch, probs, idx)
+        issues = plausibility_issues(record, min_distance=args.min_distance)
+        record["validity_issues"] = issues
+        if issues and not args.no_validity_filter:
+            rejected += 1
+            continue
+        records.append(record)
+        if len(records) >= min(args.top_k, args.n_samples):
+            break
 
     with open(args.out, "w") as f:
         json.dump(records, f, indent=2)
 
     print(f"Candidats sauvegardés dans {args.out}")
+    if not args.no_validity_filter:
+        print(f"Candidats rejetés par filtre de validité : {rejected}")
     for rank, record in enumerate(records[:10], start=1):
         print(
             f"#{rank:02d} P(SC)={record['p_superconductor']:.4f} "
