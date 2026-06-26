@@ -8,6 +8,7 @@ Exemple :
 import argparse
 import json
 import os
+from collections import Counter
 
 import torch
 from pymatgen.core import Element, Lattice, Structure
@@ -156,6 +157,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--n-samples", type=int, default=64)
     parser.add_argument("--top-k", type=int, default=20)
+    parser.add_argument("--max-batches", type=int, default=8)
     parser.add_argument("--min-atoms", type=int, default=1)
     parser.add_argument("--diffusion-checkpoint", type=str, default=None)
     parser.add_argument("--jepa-checkpoint", type=str, default=None)
@@ -177,23 +179,34 @@ def main():
     diffusion, metadata = load_diffusion(cfg, device, allow_legacy_decode=args.allow_legacy_decode)
     jepa = load_jepa(cfg, device)
 
-    vectors = diffusion.sample(args.n_samples, device=device)
-    batch = diffusion_vector_to_batch(vectors, cfg, min_atoms=args.min_atoms, metadata=metadata)
-    batch = {k: v.to(device) for k, v in batch.items()}
-    probs = score_candidates(jepa, batch)
-
-    order = torch.argsort(probs, descending=True).tolist()
     records = []
     rejected = 0
-    for idx in order:
-        record = candidate_to_record(batch, probs, idx)
-        issues = plausibility_issues(record, min_distance=args.min_distance)
-        record["validity_issues"] = issues
-        if issues and not args.no_validity_filter:
-            rejected += 1
-            continue
-        records.append(record)
-        if len(records) >= min(args.top_k, args.n_samples):
+    issue_counts: Counter[str] = Counter()
+
+    for batch_idx in range(args.max_batches):
+        vectors = diffusion.sample(args.n_samples, device=device)
+        batch = diffusion_vector_to_batch(vectors, cfg, min_atoms=args.min_atoms, metadata=metadata)
+        batch = {k: v.to(device) for k, v in batch.items()}
+        probs = score_candidates(jepa, batch)
+
+        order = torch.argsort(probs, descending=True).tolist()
+        for idx in order:
+            record = candidate_to_record(batch, probs, idx)
+            issues = plausibility_issues(record, min_distance=args.min_distance)
+            record["validity_issues"] = issues
+            if issues and not args.no_validity_filter:
+                rejected += 1
+                issue_counts.update(issues)
+                continue
+            records.append(record)
+            if len(records) >= args.top_k:
+                break
+
+        print(
+            f"Batch generation {batch_idx + 1}/{args.max_batches}: "
+            f"{len(records)}/{args.top_k} candidats valides"
+        )
+        if len(records) >= args.top_k:
             break
 
     with open(args.out, "w") as f:
@@ -202,6 +215,15 @@ def main():
     print(f"Candidats sauvegardés dans {args.out}")
     if not args.no_validity_filter:
         print(f"Candidats rejetés par filtre de validité : {rejected}")
+        if issue_counts:
+            print("Raisons principales de rejet:")
+            for issue, count in issue_counts.most_common():
+                print(f"  {issue}: {count}")
+        if not records:
+            print(
+                "Aucun candidat valide trouvé. Augmente --n-samples/--max-batches, "
+                "ou inspecte les rejets avec --no-validity-filter."
+            )
     for rank, record in enumerate(records[:10], start=1):
         print(
             f"#{rank:02d} P(SC)={record['p_superconductor']:.4f} "
