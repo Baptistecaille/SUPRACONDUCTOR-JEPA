@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 
 from config import Config
 from data import CrystalDataset, load_supercon_dataset
-from diffusion import CrystalDDPM, batch_to_diffusion_vector
+from diffusion import CrystalDDPM, batch_to_diffusion_vector, collect_diffusion_metadata
 
 
 def train_diffusion(
@@ -26,6 +26,7 @@ def train_diffusion(
 ) -> CrystalDDPM:
     model = model.to(device)
     optimizer = AdamW(model.parameters(), lr=cfg.lr_diffusion, weight_decay=cfg.weight_decay)
+    metadata = collect_diffusion_metadata(loader, cfg, device=device)
 
     os.makedirs(os.path.dirname(cfg.checkpoint_diffusion), exist_ok=True)
     best_loss = float("inf")
@@ -58,7 +59,8 @@ def train_diffusion(
                     "model": model.state_dict(),
                     "config": cfg.__dict__,
                     "best_loss": best_loss,
-                    "representation": "bounded_features_v2",
+                    "representation": metadata["representation"],
+                    "metadata": metadata,
                 },
                 cfg.checkpoint_diffusion,
             )

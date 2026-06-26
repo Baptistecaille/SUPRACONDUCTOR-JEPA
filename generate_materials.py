@@ -21,19 +21,30 @@ IDX_TO_ELEMENT = {el.Z: el.symbol for el in Element}
 IDX_TO_WYCKOFF = {idx + 1: letter for idx, letter in enumerate("abcdefghijklmnopqrstuvwxyz")}
 
 
-def load_diffusion(cfg: Config, device: torch.device) -> CrystalDDPM:
+def load_diffusion(
+    cfg: Config,
+    device: torch.device,
+    allow_legacy_decode: bool = False,
+) -> tuple[CrystalDDPM, dict | None]:
     model = CrystalDDPM(cfg).to(device)
     checkpoint = torch.load(cfg.checkpoint_diffusion, map_location=device)
-    if isinstance(checkpoint, dict) and checkpoint.get("representation") != "bounded_features_v2":
-        print(
-            "Attention: ce checkpoint diffusion utilise peut-etre une ancienne "
-            "representation. Re-entraine train_diffusion.py si les candidats "
-            "saturent vers H/Og, coordonnees 0/1 ou mailles extremes."
+    metadata = checkpoint.get("metadata") if isinstance(checkpoint, dict) else None
+    if metadata is None or (
+        isinstance(checkpoint, dict)
+        and checkpoint.get("representation") != "bounded_features_v3_empirical_decode"
+    ):
+        message = (
+            "Ce checkpoint diffusion ne contient pas le decodeur empirique v3. "
+            "Re-entraine train_diffusion.py pour eviter les candidats artificiels "
+            "du type H/Og, coordonnees 0/1 ou mailles extremes."
         )
+        if not allow_legacy_decode:
+            raise ValueError(message)
+        print("Attention:", message)
     state = checkpoint["model"] if isinstance(checkpoint, dict) and "model" in checkpoint else checkpoint
     model.load_state_dict(state)
     model.eval()
-    return model
+    return model, metadata
 
 
 def load_jepa(cfg: Config, device: torch.device) -> SupraJEPA:
@@ -97,6 +108,7 @@ def main():
     parser.add_argument("--min-atoms", type=int, default=1)
     parser.add_argument("--diffusion-checkpoint", type=str, default=None)
     parser.add_argument("--jepa-checkpoint", type=str, default=None)
+    parser.add_argument("--allow-legacy-decode", action="store_true")
     parser.add_argument("--out", type=str, default="generated_candidates.json")
     args = parser.parse_args()
 
@@ -109,11 +121,11 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device : {device}")
 
-    diffusion = load_diffusion(cfg, device)
+    diffusion, metadata = load_diffusion(cfg, device, allow_legacy_decode=args.allow_legacy_decode)
     jepa = load_jepa(cfg, device)
 
     vectors = diffusion.sample(args.n_samples, device=device)
-    batch = diffusion_vector_to_batch(vectors, cfg, min_atoms=args.min_atoms)
+    batch = diffusion_vector_to_batch(vectors, cfg, min_atoms=args.min_atoms, metadata=metadata)
     batch = {k: v.to(device) for k, v in batch.items()}
     probs = score_candidates(jepa, batch)
 

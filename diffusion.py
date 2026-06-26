@@ -46,7 +46,49 @@ def _to_diffusion_range(x: torch.Tensor) -> torch.Tensor:
 
 def _from_diffusion_range(x: torch.Tensor) -> torch.Tensor:
     """Ramène les samples DDPM vers l'intervalle feature [0, 1]."""
-    return ((x.clamp(-1.0, 1.0) + 1.0) * 0.5).clamp(0.0, 1.0)
+    return ((torch.tanh(x) + 1.0) * 0.5).clamp(0.0, 1.0)
+
+
+def _quantile_lookup(values: torch.Tensor, probs: torch.Tensor) -> torch.Tensor:
+    """Mappe des probabilités [0, 1] vers des valeurs empiriques triées."""
+    flat_values = values.flatten().to(probs.device)
+    if flat_values.numel() == 0:
+        raise ValueError("Cannot decode from empty empirical metadata.")
+    sorted_values = torch.sort(flat_values.float()).values
+    idx = torch.round(probs.clamp(0.0, 1.0) * (sorted_values.numel() - 1)).long()
+    return sorted_values[idx]
+
+
+@torch.no_grad()
+def collect_diffusion_metadata(loader, cfg: Config, device: torch.device | None = None) -> dict:
+    """Collecte les distributions empiriques utilisées pour décoder les samples.
+
+    Le DDPM prédit des variables continues. Pour les champs discrets
+    (éléments, Wyckoff, groupe d'espace, nombre d'atomes), on décode par
+    quantiles observés dans les données d'entraînement plutôt que par un
+    arrondi ordinal qui favorise artificiellement H/Og et a/z.
+    """
+    device = device or torch.device("cpu")
+    elements, wyckoffs, space_groups, lattices, atom_counts = [], [], [], [], []
+
+    for batch in loader:
+        batch = {k: v.to(device) for k, v in batch.items()}
+        valid = batch["padding_mask"][:, 1:]
+        elements.append(batch["element_ids"][:, 1:][valid].detach().cpu())
+        wyckoffs.append(batch["wyckoff_ids"][:, 1:][valid].detach().cpu())
+        space_groups.append(batch["sg_id"].detach().cpu())
+        lattices.append(batch["lattice_feat"].detach().cpu())
+        atom_counts.append(valid.sum(dim=1).detach().cpu())
+
+    lattice_feat = torch.cat(lattices, dim=0)
+    return {
+        "representation": "bounded_features_v3_empirical_decode",
+        "element_ids": torch.cat(elements).long(),
+        "wyckoff_ids": torch.cat(wyckoffs).long(),
+        "space_groups": torch.cat(space_groups).long(),
+        "lattice_feat": lattice_feat.float(),
+        "atom_counts": torch.cat(atom_counts).long().clamp(1, cfg.max_atoms),
+    }
 
 
 def batch_to_diffusion_vector(batch: dict, cfg: Config) -> torch.Tensor:
@@ -80,6 +122,7 @@ def diffusion_vector_to_batch(
     vector: torch.Tensor,
     cfg: Config,
     min_atoms: int = 1,
+    metadata: dict | None = None,
 ) -> dict:
     """Discrétise des samples DDPM en batch compatible avec SupraJEPA."""
     shape = diffusion_shape(cfg)
@@ -93,23 +136,52 @@ def diffusion_vector_to_batch(
     global_feat = features[:, : shape.n_global]
     site_feat = features[:, shape.n_global :].reshape(B, shape.n_sites, shape.n_site_features)
 
-    sg_id = torch.round(global_feat[:, 0].clamp(1 / 230, 1.0) * (cfg.n_space_groups - 1)).long()
-    sg_id = sg_id.clamp(1, cfg.n_space_groups - 1)
+    if metadata is not None and "space_groups" in metadata:
+        sg_id = _quantile_lookup(metadata["space_groups"], global_feat[:, 0]).long()
+    else:
+        sg_id = torch.round(global_feat[:, 0].clamp(1 / 230, 1.0) * (cfg.n_space_groups - 1)).long()
+        sg_id = sg_id.clamp(1, cfg.n_space_groups - 1)
 
-    lattice_feat = global_feat[:, 1:].clone()
-    lattice_feat[:, :3] = lattice_feat[:, :3].clamp(0.05, 2.5)
-    lattice_feat[:, 3:] = lattice_feat[:, 3:].clamp(0.15, 1.0)
+    if metadata is not None and "lattice_feat" in metadata:
+        lattice_values = metadata["lattice_feat"].to(device)
+        lattice_feat = torch.stack(
+            [
+                _quantile_lookup(lattice_values[:, j], global_feat[:, j + 1])
+                for j in range(6)
+            ],
+            dim=1,
+        ).to(vector.dtype)
+    else:
+        lattice_feat = global_feat[:, 1:].clone()
+        lattice_feat[:, :3] = lattice_feat[:, :3].clamp(0.05, 2.5)
+        lattice_feat[:, 3:] = lattice_feat[:, 3:].clamp(0.15, 1.0)
 
     presence_score = site_feat[:, :, 5]
-    padding_atoms = presence_score > 0.5
-    if min_atoms > 0:
-        topk = torch.topk(presence_score, k=min(min_atoms, cfg.max_atoms), dim=1).indices
-        padding_atoms.scatter_(1, topk, True)
+    if metadata is not None and "atom_counts" in metadata:
+        count_prob = presence_score.mean(dim=1)
+        atom_counts = _quantile_lookup(metadata["atom_counts"], count_prob).long()
+        atom_counts = atom_counts.clamp(min_atoms, cfg.max_atoms)
+        padding_atoms = torch.zeros(B, cfg.max_atoms, dtype=torch.bool, device=device)
+        for row, n_atoms in enumerate(atom_counts.tolist()):
+            topk = torch.topk(presence_score[row], k=max(1, n_atoms)).indices
+            padding_atoms[row, topk] = True
+    else:
+        padding_atoms = presence_score > 0.5
+        if min_atoms > 0:
+            topk = torch.topk(presence_score, k=min(min_atoms, cfg.max_atoms), dim=1).indices
+            padding_atoms.scatter_(1, topk, True)
 
-    element_atoms = torch.round(site_feat[:, :, 0].clamp(1 / 118, 1.0) * (cfg.n_elements - 1)).long()
-    wyckoff_atoms = torch.round(site_feat[:, :, 1].clamp(1 / 26, 1.0) * (cfg.n_wyckoff - 1)).long()
-    element_atoms = element_atoms.clamp(1, cfg.n_elements - 1)
-    wyckoff_atoms = wyckoff_atoms.clamp(1, cfg.n_wyckoff - 1)
+    if metadata is not None and "element_ids" in metadata:
+        element_atoms = _quantile_lookup(metadata["element_ids"], site_feat[:, :, 0]).long()
+    else:
+        element_atoms = torch.round(site_feat[:, :, 0].clamp(1 / 118, 1.0) * (cfg.n_elements - 1)).long()
+        element_atoms = element_atoms.clamp(1, cfg.n_elements - 1)
+
+    if metadata is not None and "wyckoff_ids" in metadata:
+        wyckoff_atoms = _quantile_lookup(metadata["wyckoff_ids"], site_feat[:, :, 1]).long()
+    else:
+        wyckoff_atoms = torch.round(site_feat[:, :, 1].clamp(1 / 26, 1.0) * (cfg.n_wyckoff - 1)).long()
+        wyckoff_atoms = wyckoff_atoms.clamp(1, cfg.n_wyckoff - 1)
     coords_atoms = site_feat[:, :, 2:5].clamp(0.0, 1.0)
 
     element_ids = torch.zeros(B, cfg.max_atoms + 1, dtype=torch.long, device=device)
