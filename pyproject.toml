@@ -17,3 +17,5 @@ dependencies = [
 prepare-data = "scripts.prepare_data:main"
 pretrain     = "pretrain:main"
 finetune     = "finetune:main"
+train-diffusion = "train_diffusion:main"
+generate-materials = "generate_materials:main"

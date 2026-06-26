@@ -42,6 +42,17 @@ class Config:
     data_dir: str = "data"
     checkpoint_pretrain: str = "checkpoints/jepa_pretrained.pt"
     checkpoint_finetune: str = "checkpoints/jepa_finetune.pt"
+    checkpoint_diffusion: str = "checkpoints/crystal_diffusion.pt"
+
+    # ── Diffusion générative ─────────────────────────────────────────────────
+    diffusion_steps: int = 1000
+    diffusion_hidden_dim: int = 512
+    diffusion_time_dim: int = 128
+    diffusion_layers: int = 4
+    diffusion_dropout: float = 0.1
+    epochs_diffusion: int = 200
+    batch_size_diffusion: int = 64
+    lr_diffusion: float = 1e-4
 
     # ── Reproductibilité ──────────────────────────────────────────────────────
     seed: int = 42

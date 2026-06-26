@@ -124,6 +124,37 @@ Structure cristalline
 - Loss : `BCEWithLogitsLoss` avec `pos_weight = n_neg / n_pos` (~37.5)
 - Pas de masquage (le token CLS voit toute la structure)
 
+### Phase 3 — Génération par diffusion + screening JEPA
+
+Un DDPM génère des candidats dans le même espace de tokens cristallins que le
+JEPA :
+
+```bash
+python train_diffusion.py --positives-only
+python generate_materials.py --n-samples 128 --top-k 20
+```
+
+Flux :
+
+```
+bruit gaussien
+      │
+      ▼
+CrystalDDPM
+      │  tenseurs candidats : élément, Wyckoff, coords, maille, groupe d'espace
+      ▼
+SupraJEPA.forward_classify
+      │
+      ▼
+P(supraconducteur) + ranking des candidats
+```
+
+Le générateur actuel produit des candidats en espace token. Le fichier
+`generated_candidates.json` contient les structures candidates discrétisées et
+leur score JEPA. Avant toute interprétation physique forte, il faut ajouter une
+validation cristallographique/chimique en post-traitement : distances minimales,
+neutralité de charge, compatibilité Wyckoff/groupe d'espace, puis relaxation DFT.
+
 ---
 
 ## Métriques d'évaluation
