@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "supra-jepa"
+version = "0.1.0"
+description = "JEPA-based superconductor classifier on crystal token sequences."
+requires-python = ">=3.11"
+authors = [{ name = "SUPRA-JEPA contributors" }]
+dependencies = [
+    "einops",
+    "imageio",
+    "matplotlib",
+    "numpy",
+    "omegaconf",
+    "opencv-python",
+    "pandas",
+    "pymatgen",
+    "scikit-learn",
+    "seaborn",
+    "torch",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+data = [
+    "matminer",
+    "mp-api",
+    "spglib",
+]
+
+[tool.setuptools]
+packages = [
+    "models",
+    "models.crystal_structure_jepa",
+    "models.crystal_structure_jepa.JEPA",
+    "models.crystal_structure_jepa.utils",
+    "models.property_jepa",
+    "models.property_jepa.data",
+    "models.property_jepa.model",
+    "models.property_jepa.training",
+]
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+    "models/crystal_structure_jepa/tests",
+    "models/property_jepa/tests",
+]
+# "." lets the new stage-2 code (models.property_jepa.*) import with normal
+# dotted package paths. "models/crystal_structure_jepa" is added so the
+# stage-1 code -- moved here unmodified -- keeps resolving its original
+# flat-style imports (`from JEPA import ...`, `from crystal_matrices import
+# ...`, `from train_sc_jepa import ...`) without any changes to that module.
+pythonpath = [".", "models/crystal_structure_jepa"]
