@@ -1,0 +1,17 @@
+# Pinned to match the versions this repo was developed/tested against
+# locally (models/foundation_jepa + models/physics_jepa test suite passes
+# with these). torch is installed separately in the Colab command block so
+# the correct CUDA build is picked up automatically.
+numpy==2.5.0
+pandas==3.0.3
+scipy==1.18.0
+scikit-learn==1.9.0
+pymatgen==2026.5.4
+einops
+omegaconf
+opencv-python
+matplotlib==3.11.0
+seaborn
+imageio
+tqdm==4.68.3
+pytest==9.1.1
