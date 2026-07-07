@@ -21,7 +21,7 @@ non-converged pretraining run, not a production foundation model -- see
 `docs/audit/foundation_jepa_pretrain_report.json`'s `"status"` field and the
 recommendation to resume training on a GPU host for a real run.
 
-Usage:
+Usage (CPU smoke run):
     python -m models.foundation_jepa.training.train_foundation_jepa \\
         --train-csv data/processed/property_jepa_train.csv.gz \\
         --val-csv data/processed/property_jepa_val.csv.gz \\
@@ -29,6 +29,27 @@ Usage:
         --report-path docs/audit/foundation_jepa_pretrain_report.json \\
         --max-train-rows 6000 --max-val-rows 800 \\
         --epochs 15 --batch-size 32 --device cpu
+
+Usage (full-scale single-GPU run, e.g. a 40GB A100):
+    The paper config (hidden_dim=512, layers=8, batch_size=2048) does NOT
+    fit in a single forward+backward on a 40GB GPU without
+    --grad-checkpointing and --amp-dtype bf16 (see backbone.py's
+    `MaskedMHA`/`FoundationTransformer` docstrings for the memory math). Add
+    --grad-accum-steps only if the above two still don't fit -- it further
+    shrinks the per-forward tensor size at the cost of fewer InfoNCE
+    negatives per step.
+    python -m models.foundation_jepa.training.train_foundation_jepa \\
+        --train-csv data/processed/property_jepa_train.csv.gz \\
+        --val-csv data/processed/property_jepa_val.csv.gz \\
+        --checkpoint-path models/checkpoints/foundation_jepa.pt \\
+        --report-path docs/audit/foundation_jepa_pretrain_report.json \\
+        --device cuda --batch-size 2048 --epochs 2000 \\
+        --hidden-dim 512 --layers 8 --attn-heads 16 \\
+        --max-train-rows 249719 --max-val-rows 31215 \\
+        --lr 1e-4 --weight-decay 1e-4 \\
+        --scheduler cosine --warmup-ratio 0.1 --min-lr 1e-5 \\
+        --grad-checkpointing --amp-dtype bf16 \\
+        --save-every-epochs 5
 """
 
 from __future__ import annotations
@@ -56,6 +77,7 @@ def build_model(
     temperature: float = 0.1,
     reg_weight: float = 0.01,
     matrix_scaler: MatrixMeanStdScaler | None = None,
+    grad_checkpointing: bool = False,
 ) -> FoundationJEPA:
     return FoundationJEPA(
         hidden_dim=hidden_dim,
@@ -66,6 +88,7 @@ def build_model(
         temperature=temperature,
         reg_weight=reg_weight,
         matrix_scaler=matrix_scaler,
+        grad_checkpointing=grad_checkpointing,
     )
 
 
@@ -76,43 +99,83 @@ def move_batch_to_device(batch: dict[str, Any], device: torch.device) -> dict[st
     return moved
 
 
+def chunk_batch(batch: dict[str, Any], n_chunks: int) -> list[dict[str, Any]]:
+    """Split a batch dict into `n_chunks` sub-batches along dim 0 (for gradient
+    accumulation): each sub-batch is forwarded/backwarded separately so the
+    largest tensor that ever hits the GPU is roughly `batch_size // n_chunks`
+    instead of the full `batch_size`, while the optimizer still takes one
+    step per full logical batch (see `train_one_step`'s `grad_accum_steps`).
+    Uses `torch.tensor_split`, which tolerates a batch size not evenly
+    divisible by `n_chunks` (some chunks get one extra row) instead of
+    raising like `torch.chunk` can for edge cases.
+
+    NOTE: this model's loss is an in-batch InfoNCE, whose negatives come from
+    whatever is in ONE forward pass -- chunking the batch this way reduces
+    the number of negatives seen per forward to ~`batch_size // n_chunks`,
+    it does NOT reconstruct the original batch's full negative set. This is
+    the standard memory/negative-count trade-off for accumulated contrastive
+    training; prefer `--grad-checkpointing`/`--amp-dtype bf16` first and only
+    reach for `--grad-accum-steps > 1` if those alone don't fit.
+    """
+    if n_chunks <= 1:
+        return [batch]
+    tensor_keys = [k for k, v in batch.items() if torch.is_tensor(v)]
+    other_keys = [k for k in batch if k not in tensor_keys]
+    split_per_key = {k: torch.tensor_split(batch[k], n_chunks, dim=0) for k in tensor_keys}
+    chunks = []
+    for i in range(n_chunks):
+        piece = {k: split_per_key[k][i] for k in tensor_keys}
+        if piece[tensor_keys[0]].shape[0] == 0:
+            continue
+        piece.update({k: batch[k] for k in other_keys})
+        chunks.append(piece)
+    return chunks
+
+
 def train_one_step(
     model: FoundationJEPA,
     batch: dict[str, Any],
     optimizer: torch.optim.Optimizer,
     scheduler: Any | None = None,
     grad_clip_norm: float | None = 1.0,
+    amp_dtype: torch.dtype | None = None,
+    grad_accum_steps: int = 1,
+    accum_step_idx: int = 0,
 ) -> dict[str, float]:
+    """Run one micro-batch of forward+backward, optionally under autocast and
+    accumulating gradients over `grad_accum_steps` micro-batches before an
+    optimizer step.
+
+    Args:
+        amp_dtype: If set (`torch.bfloat16` or `torch.float16`), wraps the
+            forward pass in `torch.autocast` -- roughly halves activation
+            memory vs. fp32 on top of whatever `--grad-checkpointing` saves.
+            bf16 needs no loss scaling on Ampere+ (A100); fp16 would need a
+            `GradScaler`, which this helper does not wire up -- prefer bf16
+            on an A100.
+        grad_accum_steps: Number of micro-batches to accumulate gradients
+            over before `optimizer.step()`. The per-micro-batch loss is
+            divided by this so the effective (accumulated) gradient matches
+            training at the full logical batch size, letting you keep
+            `--batch-size` at the paper's value for the loss's InfoNCE
+            negatives while shrinking the ACTUAL tensor size that hits the
+            GPU per forward/backward to `batch_size // grad_accum_steps`.
+        accum_step_idx: 0-indexed position of this micro-batch within the
+            current accumulation window; only the last one (`==
+            grad_accum_steps - 1`) triggers `optimizer.step()` / `zero_grad()`
+            / `scheduler.step()`.
+    """
     model.train()
-    optimizer.zero_grad(set_to_none=True)
-    out = model(
-        batch["frac_coords"],
-        batch["atomic_numbers"],
-        batch["raw_lattice_matrix"],
-        batch["num_atoms"],
-        batch["atom_mask"],
-        batch["formation_energy_peratom"],
-    )
-    out.loss.backward()
-    if grad_clip_norm is not None:
-        torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip_norm)
-    optimizer.step()
-    if scheduler is not None:
-        scheduler.step()
-    return {
-        "loss": out.loss.item(),
-        "loss_infonce": out.loss_infonce.item(),
-        "loss_reg": out.loss_reg.item(),
-    }
+    is_first_in_window = accum_step_idx == 0
+    is_last_in_window = accum_step_idx == grad_accum_steps - 1
+    if is_first_in_window:
+        optimizer.zero_grad(set_to_none=True)
 
-
-@torch.no_grad()
-def evaluate(model: FoundationJEPA, dataloader, device: torch.device) -> dict[str, float]:
-    model.eval()
-    totals = {"loss": 0.0, "loss_infonce": 0.0, "loss_reg": 0.0}
-    n_batches = 0
-    for batch in dataloader:
-        batch = move_batch_to_device(batch, device)
+    with torch.autocast(
+        device_type=batch["frac_coords"].device.type,
+        dtype=amp_dtype,
+        enabled=amp_dtype is not None,
+    ):
         out = model(
             batch["frac_coords"],
             batch["atomic_numbers"],
@@ -121,6 +184,43 @@ def evaluate(model: FoundationJEPA, dataloader, device: torch.device) -> dict[st
             batch["atom_mask"],
             batch["formation_energy_peratom"],
         )
+        loss = out.loss / grad_accum_steps
+    loss.backward()
+
+    if is_last_in_window:
+        if grad_clip_norm is not None:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip_norm)
+        optimizer.step()
+        if scheduler is not None:
+            scheduler.step()
+    return {
+        "loss": out.loss.item(),
+        "loss_infonce": out.loss_infonce.item(),
+        "loss_reg": out.loss_reg.item(),
+    }
+
+
+@torch.no_grad()
+def evaluate(
+    model: FoundationJEPA,
+    dataloader,
+    device: torch.device,
+    amp_dtype: torch.dtype | None = None,
+) -> dict[str, float]:
+    model.eval()
+    totals = {"loss": 0.0, "loss_infonce": 0.0, "loss_reg": 0.0}
+    n_batches = 0
+    for batch in dataloader:
+        batch = move_batch_to_device(batch, device)
+        with torch.autocast(device_type=device.type, dtype=amp_dtype, enabled=amp_dtype is not None):
+            out = model(
+                batch["frac_coords"],
+                batch["atomic_numbers"],
+                batch["raw_lattice_matrix"],
+                batch["num_atoms"],
+                batch["atom_mask"],
+                batch["formation_energy_peratom"],
+            )
         totals["loss"] += out.loss.item()
         totals["loss_infonce"] += out.loss_infonce.item()
         totals["loss_reg"] += out.loss_reg.item()
@@ -198,8 +298,16 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         temperature=args.temperature,
         reg_weight=args.reg_weight,
         matrix_scaler=matrix_scaler,
+        grad_checkpointing=args.grad_checkpointing,
     ).to(device)
     n_params = sum(p.numel() for p in model.parameters())
+
+    amp_dtype = {"none": None, "bf16": torch.bfloat16, "fp16": torch.float16}[args.amp_dtype]
+    if args.amp_dtype == "fp16":
+        print(
+            "[foundation_jepa] WARNING: --amp-dtype fp16 has no GradScaler wired up here "
+            "(risk of silent NaN/inf gradients); prefer bf16 on an A100/H100."
+        )
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
@@ -217,7 +325,18 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         n_batches = 0
         for batch in train_loader:
             batch = move_batch_to_device(batch, device)
-            metrics = train_one_step(model, batch, optimizer, scheduler=scheduler)
+            micro_batches = chunk_batch(batch, args.grad_accum_steps)
+            n_micro = len(micro_batches)
+            for i, micro_batch in enumerate(micro_batches):
+                metrics = train_one_step(
+                    model,
+                    micro_batch,
+                    optimizer,
+                    scheduler=scheduler,
+                    amp_dtype=amp_dtype,
+                    grad_accum_steps=n_micro,
+                    accum_step_idx=i,
+                )
             for k in epoch_losses:
                 epoch_losses[k] += metrics[k]
             n_batches += 1
@@ -225,7 +344,11 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         for k in epoch_losses:
             epoch_losses[k] /= max(1, n_batches)
 
-        val_metrics = evaluate(model, val_loader, device) if val_loader is not None else None
+        val_metrics = (
+            evaluate(model, val_loader, device, amp_dtype=amp_dtype)
+            if val_loader is not None
+            else None
+        )
         lr = optimizer.param_groups[0]["lr"]
         log_line = (
             f"epoch={epoch} step={global_step} "
@@ -340,6 +463,47 @@ def parse_args() -> argparse.Namespace:
             "final epoch), so a long unattended GPU run isn't lost to a "
             "session timeout/preemption. Set to 1 for maximum safety at the "
             "cost of extra I/O, or a large number to only save at the end."
+        ),
+    )
+    parser.add_argument(
+        "--grad-checkpointing",
+        action="store_true",
+        help=(
+            "Wrap each transformer block in activation checkpointing "
+            "(recompute-in-backward instead of keeping every block's "
+            "activations resident). ~8x cut to transformer activation "
+            "memory at the paper's layers=8 config for ~20-30%% more "
+            "compute. Recommended ON for any full-scale GPU run."
+        ),
+    )
+    parser.add_argument(
+        "--amp-dtype",
+        choices=["none", "bf16", "fp16"],
+        default="none",
+        help=(
+            "Run the forward pass (and loss) under torch.autocast in this "
+            "dtype. 'bf16' is recommended on Ampere+ (A100/H100): no loss "
+            "scaling needed, roughly halves activation memory vs fp32. "
+            "'fp16' needs a GradScaler that this script does not wire up -- "
+            "avoid unless you add one. 'none' keeps fp32 (default, matches "
+            "prior behavior)."
+        ),
+    )
+    parser.add_argument(
+        "--grad-accum-steps",
+        type=int,
+        default=1,
+        help=(
+            "Split each --batch-size batch into this many micro-batches, "
+            "run forward/backward on each separately, and only step the "
+            "optimizer after the last one (gradients accumulate). Lets you "
+            "keep --batch-size at the paper's value (which sets the number "
+            "of InfoNCE negatives) while shrinking the actual tensor size "
+            "that hits the GPU per forward/backward to roughly "
+            "batch_size // grad_accum_steps. NOTE: this also shrinks the "
+            "number of in-batch negatives seen per forward pass -- prefer "
+            "--grad-checkpointing / --amp-dtype bf16 first and only "
+            "increase this if the model still doesn't fit."
         ),
     )
     return parser.parse_args()

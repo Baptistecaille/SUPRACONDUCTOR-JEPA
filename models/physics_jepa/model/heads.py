@@ -91,6 +91,7 @@ class PhysicsHeads(nn.Module):
         num_atoms: torch.Tensor,
         atom_mask: torch.Tensor,
     ) -> PhysicsHeadsOutput:
+        
         if self.freeze_encoder:
             with torch.no_grad():
                 embedding = self.foundation_model.encode(

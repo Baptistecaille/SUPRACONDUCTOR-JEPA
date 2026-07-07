@@ -71,6 +71,7 @@ class FoundationJEPA(nn.Module):
         temperature: float = 0.1,
         reg_weight: float = 0.01,
         matrix_scaler: MatrixMeanStdScaler | None = None,
+        grad_checkpointing: bool = False,
     ):
         super().__init__()
         self.encoder = FoundationCrystalEncoder(
@@ -79,6 +80,7 @@ class FoundationJEPA(nn.Module):
             attn_heads=attn_heads,
             dropout=dropout,
             max_atoms=max_atoms,
+            grad_checkpointing=grad_checkpointing,
         )
         self.predictor = MLP(hidden_dim, hidden_dim, hidden_dim)
         # 6D augmentation conditioning: 3D translation vector + 3 quaternion draws.

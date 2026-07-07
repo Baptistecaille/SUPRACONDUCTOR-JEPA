@@ -80,6 +80,7 @@ class FoundationCrystalEncoder(nn.Module):
         attn_heads: int = 16,
         dropout: float = 0.0,
         max_atoms: int = 500,
+        grad_checkpointing: bool = False,
     ):
         super().__init__()
         if hidden_dim % attn_heads != 0:
@@ -89,7 +90,12 @@ class FoundationCrystalEncoder(nn.Module):
 
         self.pre_backbone = MLP(ATOM_TOKEN_DIM, hidden_dim, hidden_dim)
         self.backbone = FoundationTransformer(
-            hidden_dim, layers, attn_heads, dropout, max_len=max_atoms + 1
+            hidden_dim,
+            layers,
+            attn_heads,
+            dropout,
+            max_len=max_atoms + 1,
+            grad_checkpointing=grad_checkpointing,
         )
 
     def forward(self, atom_tokens: torch.Tensor, atom_mask: torch.Tensor) -> torch.Tensor:

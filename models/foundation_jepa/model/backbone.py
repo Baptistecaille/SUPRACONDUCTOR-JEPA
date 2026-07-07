@@ -21,10 +21,10 @@ masking discipline) operating on that pre-padded input instead.
 
 from __future__ import annotations
 
-import math
-
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+import torch.utils.checkpoint as torch_checkpoint
 
 
 class MLP(nn.Module):
@@ -48,16 +48,33 @@ class MLP(nn.Module):
 
 
 class MaskedMHA(nn.Module):
-    """Multi-head self-attention with a `[B, L]` padding mask, port of official `MHA`."""
+    """Multi-head self-attention with a `[B, L]` padding mask, port of official `MHA`.
+
+    Uses `torch.nn.functional.scaled_dot_product_attention` (SDPA) instead of
+    manually materializing the `[B, attn_head, L, L]` score/softmax tensors.
+    The manual (matmul -> masked_fill -> softmax -> matmul) formulation used
+    prior to this change allocates 3 full `[B, attn_head, L, L]` fp32 tensors
+    per layer that must be kept around for backward; at the paper's config
+    (`hidden_dim=512` -> `attn_head=16`, `batch_size=2048`, `L~201` atoms+CLS)
+    that is ~5.3 GB *per tensor* and blew a 14.56 GiB Colab GPU with a CUDA
+    OOM (see `docs/audit/foundation_jepa_pretrain_report.json` run log /
+    incident). SDPA dispatches to a fused kernel (Flash-Attention /
+    memory-efficient attention on CUDA) that never materializes the full
+    `L x L` matrix, so memory scales with `L` instead of `L^2` and this same
+    config fits comfortably on a single GPU. Only the key/padding mask is
+    passed (not a query-side mask): the CLS token is always unmasked, so no
+    key row is ever fully masked out (avoiding the all -inf -> NaN softmax
+    edge case), and padded query rows are zeroed by the caller's
+    `masked_fill` regardless of what value they compute here.
+    """
 
     def __init__(self, attn_head: int, dim: int, dropout: float):
         super().__init__()
         if dim % attn_head != 0:
             raise ValueError(f"dim ({dim}) must be divisible by attn_head ({attn_head})")
-        self.dropout = nn.Dropout(dropout)
+        self.dropout_p = dropout
         self.dim = dim
         self.attn_head = attn_head
-        self.softmax = nn.Softmax(dim=-1)
         self.WO = nn.Linear(dim, dim)
 
     def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
@@ -70,16 +87,15 @@ class MaskedMHA(nn.Module):
         k = k.reshape(b, lk, self.attn_head, dim_head).transpose(1, 2)
         v = v.reshape(b, lv, self.attn_head, dim_head).transpose(1, 2)
 
-        pair_mask = mask.unsqueeze(1).unsqueeze(-1).float()
-        pair_mask = pair_mask @ pair_mask.transpose(-1, -2)
+        # Key-side padding mask, broadcast over heads and query positions:
+        # [B, L] -> [B, 1, 1, L]. True = attend (SDPA boolean-mask convention).
+        attn_mask = mask.unsqueeze(1).unsqueeze(1)
 
-        attn_scores = q @ k.transpose(2, 3) / math.sqrt(dim_head)
-        attn_scores = attn_scores.masked_fill(pair_mask == 0, float("-1e3"))
-        attn = self.softmax(attn_scores)
-        attn = self.dropout(attn)
-
-        attn_out = (attn @ v).transpose(1, 2).reshape(b, lq, self.dim)
-        attn_out = self.dropout(attn_out)
+        attn_out = F.scaled_dot_product_attention(
+            q, k, v, attn_mask=attn_mask, dropout_p=self.dropout_p if self.training else 0.0
+        )
+        attn_out = attn_out.transpose(1, 2).reshape(b, lq, self.dim)
+        attn_out = F.dropout(attn_out, p=self.dropout_p, training=self.training)
         return self.WO(attn_out)
 
 
@@ -121,6 +137,16 @@ class FoundationTransformer(nn.Module):
         dropout: Dropout probability inside attention/MLP.
         max_len: Max sequence length (atoms + CLS token) covered by the
             learned absolute positional embedding table.
+        grad_checkpointing: If True, wrap each `PreNormEncoderLayer` block in
+            `torch.utils.checkpoint.checkpoint` during training. Trades one
+            extra forward pass per block (recompute in backward) for not
+            keeping that block's activations resident across the whole
+            stack at once -- on an 8-layer stack this turns "8 blocks of
+            activations alive simultaneously" into "~1 block alive at a
+            time", roughly an 8x cut to the transformer's activation memory
+            at the cost of ~20-30% more compute. Only engages in training
+            mode with grad enabled; a no-op under `model.eval()` /
+            `torch.no_grad()` (no backward pass to save memory for there).
     """
 
     def __init__(
@@ -130,6 +156,7 @@ class FoundationTransformer(nn.Module):
         attn_head: int,
         dropout: float,
         max_len: int = 500,
+        grad_checkpointing: bool = False,
     ):
         super().__init__()
         self.pe_emb = nn.Parameter(torch.zeros(max_len, hidden_dim))
@@ -142,6 +169,7 @@ class FoundationTransformer(nn.Module):
             [PreNormEncoderLayer(hidden_dim, attn_head, dropout) for _ in range(layers)]
         )
         self.norm = nn.LayerNorm(hidden_dim)
+        self.grad_checkpointing = grad_checkpointing
 
     def forward(self, h: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """
@@ -165,9 +193,13 @@ class FoundationTransformer(nn.Module):
 
         h = h + self.pe_emb[: n + 1].unsqueeze(0)
 
+        use_checkpoint = self.grad_checkpointing and self.training and torch.is_grad_enabled()
         for block in self.blocks:
             h = h.masked_fill(~full_mask.unsqueeze(-1), 0.0)
-            h = block(h, full_mask)
+            if use_checkpoint:
+                h = torch_checkpoint.checkpoint(block, h, full_mask, use_reentrant=False)
+            else:
+                h = block(h, full_mask)
         h = self.norm(h)
         h = h.masked_fill(~full_mask.unsqueeze(-1), 0.0)
         return h
