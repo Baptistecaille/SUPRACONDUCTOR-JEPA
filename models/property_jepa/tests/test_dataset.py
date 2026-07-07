@@ -49,12 +49,12 @@ def _make_fixture_df() -> pd.DataFrame:
     row = _empty_row("NaCl", _nacl_cif())
     row["thermo_formation_energy_peratom"] = -2.1
     row["thermo_e_above_hull"] = 0.0
-    row["electronic_bandgap_optb88vdw_jarvis"] = 5.0
+    row["electronic_bandgap_hse_jarvis"] = 5.0
     rows.append(row)
 
     row = _empty_row("MgO", _mgo_cif())
     row["thermo_formation_energy_peratom"] = -3.0
-    row["mechanical_bulk_modulus_kv"] = 160.0
+    row["magnetic_total_moment_best"] = 160.0
     rows.append(row)
 
     row = _empty_row("NaCl2", _nacl_cif())
@@ -84,8 +84,8 @@ def test_compute_property_stats_fits_mean_std():
     stats = compute_property_stats(df)
     assert stats.mean["formation_energy_peratom"] == pytest.approx((-2.1 + -3.0) / 2)
     # a property with zero observed rows falls back to mean=0, std=1
-    assert stats.mean["poisson_ratio"] == 0.0
-    assert stats.std["poisson_ratio"] == 1.0
+    assert stats.mean["e_phase_separation"] == 0.0
+    assert stats.std["e_phase_separation"] == 1.0
 
 
 def test_property_stats_normalize_roundtrip():

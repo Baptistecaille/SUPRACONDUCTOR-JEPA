@@ -1,0 +1,61 @@
+{
+  "pretraining_corpus_mp_csv_gz": {
+    "rows_before_dedup": 92762,
+    "unique_material_id": 80769,
+    "duplicate_rows_to_drop_keep_first": 11993,
+    "duplicate_material_id_groups": 11993,
+    "ef_per_atom_differs_within_dup_group": 0,
+    "atom_count_stats_before": {
+      "count": 92762.0,
+      "mean": 10.100547638041439,
+      "std": 5.410357642230409,
+      "min": 1.0,
+      "25%": 5.0,
+      "50%": 10.0,
+      "75%": 14.0,
+      "max": 20.0
+    },
+    "atom_count_stats_after": {
+      "count": 80769.0,
+      "mean": 10.5534796766086,
+      "std": 5.379077025669873,
+      "min": 1.0,
+      "25%": 6.0,
+      "50%": 10.0,
+      "75%": 15.0,
+      "max": 20.0
+    }
+  },
+  "tc_labeled_set_no_train_leak_csv": {
+    "rows": 401,
+    "unique_compositions": 393,
+    "compositions_appearing_more_than_once": 8,
+    "rows_with_composition_overlap_vs_mp_pretrain_corpus": 43,
+    "rows_with_composition_overlap_vs_3dsc_mp_reference": 401,
+    "tc_stats": {
+      "count": 401.0,
+      "mean": 25.700922693266833,
+      "std": 31.301871667625704,
+      "min": 0.05,
+      "25%": 2.79,
+      "50%": 8.0,
+      "75%": 42.1,
+      "max": 105.2
+    },
+    "n_atoms_stats": {
+      "count": 401.0,
+      "mean": 8.269326683291771,
+      "std": 5.621590681961043,
+      "min": 1.0,
+      "25%": 5.0,
+      "50%": 8.0,
+      "75%": 9.0,
+      "max": 59.0
+    }
+  },
+  "existing_filter_gap": {
+    "description": "superband_mp_matched_no_train_leak.csv was built by keeping only rows whose mp_material_id does NOT appear in data/jepa/mp.csv.gz (exact material_id match). This misses cases where the SAME composition appears in mp.csv.gz under a DIFFERENT material_id (different polymorph/relaxation of an identical stoichiometry), which is exactly the kind of near-duplicate a JEPA encoder pretrained on that composition could exploit to trivially embed the Tc-set example it later sees, i.e. genuine leakage even though the row-level ids differ.",
+    "rows_missed_by_current_filter": 43
+  },
+  "note_all_401_rows_leak_vs_3dsc_source": "All 401 rows trivially share a composition with 3DSC_MP.csv because that is the reference table the matching script used to find MP structures for each SuperBand formula in the first place (by construction, composition_key was the join key) -- this is expected and not itself a data leak; what matters is overlap with the pretraining corpus (mp.csv.gz)."
+}

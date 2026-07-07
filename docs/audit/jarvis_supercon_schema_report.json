@@ -1,0 +1,39 @@
+{
+  "source": "JARVIS supercon_3d + supercon_2d (DFPT electron-phonon coupling), NIST, via jarvis-tools",
+  "reference": "https://www.nature.com/articles/s41524-022-00933-1 (3D); https://doi.org/10.1021/acs.nanolett.2c04420 (2D)",
+  "total_rows": 1219,
+  "rows_by_dimensionality": {
+    "3D": 1058,
+    "2D": 161
+  },
+  "property_coverage": {
+    "lambda_ep": {
+      "n_valid": 1219,
+      "pct_valid": 100.0
+    },
+    "omega_log": {
+      "n_valid": 1219,
+      "pct_valid": 100.0
+    },
+    "tc_allen_dynes": {
+      "n_valid": 1219,
+      "pct_valid": 100.0
+    },
+    "a2f_resampled": {
+      "n_valid": 1219,
+      "pct_valid": 100.0
+    },
+    "a2f_original_x": {
+      "n_valid": 1219,
+      "pct_valid": 100.0
+    },
+    "a2f_original_y": {
+      "n_valid": 1219,
+      "pct_valid": 100.0
+    }
+  },
+  "a2f_original_x_note": "The alpha^2F(omega) frequency grid (a2f_original_x) is NOT a fixed set of bins shared across materials -- it varies per material and can include negative frequencies (dynamically unstable / imaginary phonon modes). Consumers must interpolate onto a common grid themselves; values are stored as JSON-encoded lists, not fixed-width columns.",
+  "wlog_units_note": "omega_log (wlog) is stored by JARVIS in Kelvin, not THz/cm^-1 -- this is the logarithmic-averaged phonon frequency the Allen-Dynes formula consumes directly, distinct from a Debye frequency.",
+  "overlap_with_dft_3d_note": "Every jarvis_id here is drawn from the same id space as dft_3d (see ingest_jarvis_dft.py / data/raw/jarvis_dft.csv.gz) -- these rows are a strict subset by jarvis_id, so downstream joins can use jarvis_id directly rather than falling back to composition_key.",
+  "cif_conversion_failures": 0
+}

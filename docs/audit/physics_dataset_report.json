@@ -1,0 +1,23 @@
+{
+  "sources": [
+    "data/raw/jarvis_supercon.csv.gz",
+    "data/raw/alexandria_supercon.csv.gz"
+  ],
+  "dedup_method": "STRUCTURE-level (one row per polymorph); only exact-CIF duplicates are removed. Composition is used only to keep every polymorph of a given composition within the same train/val/test split (and to exclude pretrain-corpus-leaked compositions), not to collapse rows.",
+  "n_exact_cif_duplicates_removed": 0,
+  "n_total_rows": 9472,
+  "n_total_compositions": 7522,
+  "n_leaked_vs_pretrain_compositions": 2592,
+  "split_row_counts": {
+    "train": 7569,
+    "val": 952,
+    "test": 951
+  },
+  "split_composition_counts": {
+    "train": 5776,
+    "val": 885,
+    "test": 861
+  },
+  "polymorph_rows_per_composition_max": 10,
+  "compositions_with_multiple_structures": 1345
+}

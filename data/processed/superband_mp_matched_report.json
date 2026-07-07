@@ -1,0 +1,16 @@
+{
+  "matched_rows_before_tc_filter": 4013,
+  "output_cif_sources": {
+    "3dsc_mp": 3988,
+    "superband_local": 25
+  },
+  "output_rows": 4013,
+  "output_unique_mp_material_ids": 1516,
+  "output_unique_superband_ids": 4013,
+  "reference_ambiguous_compositions": 14,
+  "reference_rows": 5773,
+  "reference_unique_compositions": 5759,
+  "superband_rows": 8625,
+  "superband_rows_with_composition_key": 8598,
+  "superband_rows_with_local_cif": 44
+}

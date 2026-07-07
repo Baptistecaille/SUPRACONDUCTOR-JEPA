@@ -1,0 +1,72 @@
+{
+  "source": "JARVIS-DFT (dft_3d), NIST, via jarvis-tools",
+  "reference": "https://doi.org/10.1016/j.commatsci.2025.114063",
+  "download_date": "2026-07-03",
+  "total_rows": 93902,
+  "cif_conversion_failures": 0,
+  "dft_functional_note": "Primary functional is OptB88vdW (optb88vdw_bandgap always present); mbj_bandgap (TBmBJ) and hse_gap (HSE06) are higher-level gap corrections computed only for a subset -- these three gap columns are NOT interchangeable and should be treated as separate features / kept with a functional tag, not merged into one 'bandgap' column.",
+  "property_coverage": {
+    "formation_energy_peratom": {
+      "n_valid": 93902,
+      "pct_valid": 100.0
+    },
+    "e_above_hull": {
+      "n_valid": 93902,
+      "pct_valid": 100.0
+    },
+    "optb88vdw_bandgap": {
+      "n_valid": 93902,
+      "pct_valid": 100.0
+    },
+    "mbj_bandgap": {
+      "n_valid": 21559,
+      "pct_valid": 22.96
+    },
+    "hse_gap": {
+      "n_valid": 56,
+      "pct_valid": 0.06
+    },
+    "magmom_oszicar": {
+      "n_valid": 88811,
+      "pct_valid": 94.58
+    },
+    "magmom_outcar": {
+      "n_valid": 92170,
+      "pct_valid": 98.16
+    },
+    "bulk_modulus_kv": {
+      "n_valid": 32433,
+      "pct_valid": 34.54
+    },
+    "shear_modulus_gv": {
+      "n_valid": 32433,
+      "pct_valid": 34.54
+    },
+    "poisson_ratio": {
+      "n_valid": 32205,
+      "pct_valid": 34.3
+    },
+    "elastic_tensor_max": {
+      "n_valid": 34323,
+      "pct_valid": 36.55
+    },
+    "tc_supercon": {
+      "n_valid": 1058,
+      "pct_valid": 1.13
+    }
+  },
+  "column_domain_map": {
+    "formation_energy_peratom": "thermo",
+    "e_above_hull": "thermo",
+    "optb88vdw_bandgap": "electronic",
+    "mbj_bandgap": "electronic",
+    "hse_gap": "electronic",
+    "magmom_oszicar": "magnetic",
+    "magmom_outcar": "magnetic",
+    "bulk_modulus_kv": "mechanical",
+    "shear_modulus_gv": "mechanical",
+    "poisson_ratio": "mechanical",
+    "elastic_tensor_max": "mechanical",
+    "tc_supercon": "superconducting"
+  }
+}

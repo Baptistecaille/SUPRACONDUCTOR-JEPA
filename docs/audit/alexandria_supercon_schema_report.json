@@ -1,0 +1,30 @@
+{
+  "source": "Alexandria_SuperConDB, via jarvis-tools (dataset=alex_supercon)",
+  "reference": "https://doi.org/10.1002/adfm.202404043",
+  "total_rows": 8253,
+  "cif_conversion_failures": 0,
+  "property_coverage": {
+    "dos_ef": {
+      "n_valid": 8253,
+      "pct_valid": 100.0
+    },
+    "debye_freq": {
+      "n_valid": 8253,
+      "pct_valid": 100.0
+    },
+    "lambda_ep": {
+      "n_valid": 8253,
+      "pct_valid": 100.0
+    },
+    "omega_log": {
+      "n_valid": 8253,
+      "pct_valid": 100.0
+    },
+    "tc_allen_dynes": {
+      "n_valid": 8253,
+      "pct_valid": 100.0
+    }
+  },
+  "no_a2f_spectrum_note": "This source has no alpha^2F(omega) spectrum -- only the scalar lambda_ep/omega_log/dos_ef/debye_freq/tc_allen_dynes quantities. The DOS-phonon auxiliary loss can only draw on data/raw/jarvis_supercon.csv.gz (JARVIS supercon_3d/supercon_2d), which does carry the full spectrum.",
+  "debye_vs_omega_log_note": "debye_freq (Debye frequency) and omega_log (logarithmic-averaged frequency) are DIFFERENT quantities -- the Allen-Dynes formula consumes omega_log, not debye_freq. Both are kept as separate columns; do not substitute one for the other."
+}

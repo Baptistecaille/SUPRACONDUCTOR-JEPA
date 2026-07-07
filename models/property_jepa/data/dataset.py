@@ -56,18 +56,14 @@ PROPERTY_COLUMNS: dict[str, str] = {
     "formation_energy_peratom": "thermo_formation_energy_peratom",
     "e_above_hull": "thermo_e_above_hull",
     "e_phase_separation": "thermo_e_phase_separation_alexandria",
-    "bandgap_optb88vdw": "electronic_bandgap_optb88vdw_jarvis",
-    "bandgap_mbj": "electronic_bandgap_mbj_jarvis",
     "bandgap_hse": "electronic_bandgap_hse_jarvis",
     "dos_ef": "electronic_dos_ef_alexandria",
     "magmom_total": "magnetic_total_moment_best",
-    "bulk_modulus_kv": "mechanical_bulk_modulus_kv",
-    "shear_modulus_gv": "mechanical_shear_modulus_gv",
-    "poisson_ratio": "mechanical_poisson_ratio",
-    "elastic_tensor_max": "mechanical_elastic_tensor_max_jarvis",
     "tc_experimental": "tc_experimental",
     "tc_dft_predicted": "tc_dft_predicted",
 }
+# bandgap_optb88vdw, bandgap_mbj, bulk_modulus_kv, shear_modulus_gv,
+# poisson_ratio, elastic_tensor_max retired -- see property_schema.py note.
 
 assert set(PROPERTY_COLUMNS) == set(PROPERTY_TYPES), (
     "PROPERTY_COLUMNS must cover exactly the canonical types in property_schema.PROPERTY_TYPES"

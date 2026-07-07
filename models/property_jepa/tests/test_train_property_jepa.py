@@ -40,7 +40,7 @@ def _fixture_df(n_rows: int = 6) -> pd.DataFrame:
         row["composition_key"] = f"Mat{i}"
         row["cif"] = _cif(structure)
         row["thermo_formation_energy_peratom"] = -1.0 - 0.1 * i
-        row["mechanical_bulk_modulus_kv"] = 100.0 + i
+        row["magnetic_total_moment_best"] = 100.0 + i
         rows.append(row)
     return pd.DataFrame(rows)
 

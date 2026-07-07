@@ -1,5 +1,6 @@
 import torch
 
+from models.property_jepa.data.property_schema import NUM_PROPERTY_TYPES
 from models.property_jepa.model.crystal_encoder import RotationInvariantCrystalEncoder
 from models.property_jepa.model.jepa import PropertyJEPA
 from models.property_jepa.model.predictor import PropertyPredictor
@@ -7,7 +8,6 @@ from models.property_jepa.model.property_encoder import PropertyEncoder, TargetP
 from models.property_jepa.model.regulizers import VCLoss
 
 HIDDEN_DIM = 16
-NUM_PROPERTY_TYPES = 14
 
 
 def _make_model(reg_weight: float = 0.0) -> PropertyJEPA:

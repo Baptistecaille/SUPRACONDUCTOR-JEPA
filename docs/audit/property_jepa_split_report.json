@@ -1,0 +1,45 @@
+{
+  "description": "Composition-level, leak-free train/val/test split of the consolidated multi-property corpus (data/processed/consolidated_properties.csv.gz).",
+  "method": "1) Any composition present in the Materials Project pretraining corpus (data/jepa/mp.csv.gz, via composition_key) is confined to an eligible-for-train-only pool -- it can appear in train but never in val/test, preventing pretrain/eval leakage (same principle as scripts/build_tc_splits.py's composition-level leak filter). 2) From the remaining leak-free pool (255,132 / 312,149 compositions), val and test (10% each of the TOTAL corpus) are drawn via proportional stratified sampling on (has_experimental_Tc x has_mechanical_props x cif_source), seed=42, so rare labels (experimental Tc: 1.27% of rows; mechanical: 6.9%) are represented in both eval splits roughly in proportion to their overall prevalence, rather than being concentrated in train.",
+  "seed": 42,
+  "split_sizes": {
+    "train": 249719,
+    "test": 31215,
+    "val": 31215
+  },
+  "leak_check": {
+    "val_rows_in_mp_pretrain_corpus": 0,
+    "test_rows_in_mp_pretrain_corpus": 0,
+    "train_val_test_composition_overlap": {
+      "train_and_val": 0,
+      "train_and_test": 0,
+      "val_and_test": 0
+    }
+  },
+  "per_split_property_coverage": {
+    "train": {
+      "n_rows": 249719,
+      "tc_experimental": 3268,
+      "mechanical_bulk_modulus_kv": 19018,
+      "thermo_formation_energy_peratom": 247674,
+      "electronic_bandgap_best": 235040,
+      "magnetic_total_moment_best": 234940
+    },
+    "val": {
+      "n_rows": 31215,
+      "tc_experimental": 348,
+      "mechanical_bulk_modulus_kv": 1239,
+      "thermo_formation_energy_peratom": 30882,
+      "electronic_bandgap_best": 30882,
+      "magnetic_total_moment_best": 30879
+    },
+    "test": {
+      "n_rows": 31215,
+      "tc_experimental": 348,
+      "mechanical_bulk_modulus_kv": 1239,
+      "thermo_formation_energy_peratom": 30885,
+      "electronic_bandgap_best": 30885,
+      "magnetic_total_moment_best": 30878
+    }
+  }
+}

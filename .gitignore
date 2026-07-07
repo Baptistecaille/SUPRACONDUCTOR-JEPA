@@ -3,3 +3,19 @@
 data/jepa/mp.csv
 .DS_Store
 ._*
+
+# Colab-pipeline hygiene: exclude legacy stage-1 outputs, local caches, and
+# raw source dumps that are not needed to run property_jepa/foundation_jepa/
+# physics_jepa training (only data/processed/*.csv.gz is read by the
+# training scripts). Re-add selectively if you need to regenerate splits.
+models/crystal_structure_jepa/checkpoints/
+models/crystal_structure_jepa/outputs/
+models/property_jepa/outputs/
+.cache_jarvis/
+data/SuperBand/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+.claude/
+docs-site/

@@ -1,0 +1,85 @@
+{
+  "mp.csv.gz": {
+    "rows": 92762,
+    "cols": [
+      "material_id",
+      "cif",
+      "ef_per_atom"
+    ],
+    "dtypes": {
+      "material_id": "str",
+      "cif": "str",
+      "ef_per_atom": "float64"
+    },
+    "nulls": {
+      "material_id": 0,
+      "cif": 0,
+      "ef_per_atom": 0
+    },
+    "unique_material_id": 80769,
+    "duplicate_rows_material_id": 11993
+  },
+  "superband_mp_matched_no_train_leak.csv": {
+    "rows": 401,
+    "cols": [
+      "material_id",
+      "cif",
+      "ef_per_atom",
+      "tc",
+      "superband_id",
+      "superband_formula",
+      "superband_cif_id",
+      "mp_material_id",
+      "cif_source"
+    ],
+    "dtypes": {
+      "material_id": "str",
+      "cif": "str",
+      "ef_per_atom": "float64",
+      "tc": "float64",
+      "superband_id": "int64",
+      "superband_formula": "str",
+      "superband_cif_id": "int64",
+      "mp_material_id": "str",
+      "cif_source": "str"
+    },
+    "nulls": {
+      "material_id": 0,
+      "cif": 0,
+      "ef_per_atom": 0,
+      "tc": 0,
+      "superband_id": 0,
+      "superband_formula": 0,
+      "superband_cif_id": 0,
+      "mp_material_id": 0,
+      "cif_source": 0
+    },
+    "unique_superband_id": 401,
+    "tc_min": 0.05,
+    "tc_max": 105.2
+  },
+  "schema_consistency": {
+    "mp_columns": [
+      "material_id",
+      "cif",
+      "ef_per_atom"
+    ],
+    "tc_columns": [
+      "material_id",
+      "cif",
+      "ef_per_atom",
+      "tc",
+      "superband_id",
+      "superband_formula",
+      "superband_cif_id",
+      "mp_material_id",
+      "cif_source"
+    ],
+    "common_columns": [
+      "cif",
+      "ef_per_atom",
+      "material_id"
+    ],
+    "note": "tc set is a superset schema of mp (material_id, cif, ef_per_atom shared; adds tc + provenance cols)"
+  }
+}

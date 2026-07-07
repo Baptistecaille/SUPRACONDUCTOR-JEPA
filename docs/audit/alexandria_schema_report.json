@@ -1,0 +1,52 @@
+{
+  "source": "Alexandria materials database, PBEsol functional, 3D all",
+  "reference": "https://alexandria.icams.rub.de/",
+  "download_date": "2026-07-03",
+  "total_rows": 415419,
+  "cif_conversion_failures": 0,
+  "dft_functional_note": "All rows computed with PBEsol functional (single, consistent level of theory for this file -- distinct from JARVIS's OptB88vdW/TBmBJ/HSE06 and from Materials Project's PBE/PBE+U). Keep dft_functional column when merging across sources to avoid silently mixing theory levels.",
+  "property_coverage": {
+    "formation_energy_peratom": {
+      "n_valid": 415419,
+      "pct_valid": 100.0
+    },
+    "e_above_hull": {
+      "n_valid": 415419,
+      "pct_valid": 100.0
+    },
+    "e_phase_separation": {
+      "n_valid": 415419,
+      "pct_valid": 100.0
+    },
+    "band_gap_ind": {
+      "n_valid": 415419,
+      "pct_valid": 100.0
+    },
+    "band_gap_dir": {
+      "n_valid": 415419,
+      "pct_valid": 100.0
+    },
+    "total_mag": {
+      "n_valid": 415419,
+      "pct_valid": 100.0
+    },
+    "dos_ef": {
+      "n_valid": 415419,
+      "pct_valid": 100.0
+    },
+    "energy_total": {
+      "n_valid": 415419,
+      "pct_valid": 100.0
+    }
+  },
+  "column_domain_map": {
+    "formation_energy_peratom": "thermo",
+    "e_above_hull": "thermo",
+    "e_phase_separation": "thermo",
+    "band_gap_ind": "electronic",
+    "band_gap_dir": "electronic",
+    "dos_ef": "electronic",
+    "total_mag": "magnetic",
+    "energy_total": "thermo"
+  }
+}

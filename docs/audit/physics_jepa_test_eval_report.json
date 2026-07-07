@@ -1,0 +1,32 @@
+{
+  "status": "bounded_local_cpu_finetune_run_test_evaluation",
+  "note": "Held-out test-set evaluation (physics_jepa_test.csv.gz, 951 structures) for both fine-tuning strategies. Inherits all caveats of the underlying bounded local foundation_jepa pretraining and physics_jepa fine-tuning runs (see physics_jepa_evaluation_report.md). UPDATED from the original report: Tc is now reported under BOTH the bare (uncorrected) Allen-Dynes interpolation formula AND the f1-strong-coupling-corrected formula (allen_dynes_tc(..., apply_strong_coupling_correction=True), the new default in physics_utils.py). The f2 correction (needs the spectral second moment omega2) is NOT applied to model predictions -- the heads only predict (lambda_ep, omega_log), with no omega2 prediction pathway -- see the f2_auxiliary_* fields below for an illustrative ground-truth-only estimate of f2's magnitude on the 48 test rows that carry a raw alpha^2F spectrum.",
+  "joint_finetuning": {
+    "loss": 1.115759233136972,
+    "loss_lambda": 0.6231350809335708,
+    "loss_omega": 0.4649867847561836,
+    "loss_validity": 0.5527480105559032,
+    "mae_lambda_ep": 0.204169357111276,
+    "mae_omega_log": 36.477201860911215,
+    "mae_tc_bare_formula": 1.6940604448318481,
+    "mae_tc_f1_corrected_formula": 1.7785495519638062
+  },
+  "linear_probe_frozen_encoder": {
+    "loss": 1.2239148239294688,
+    "loss_lambda": 0.6680774619181951,
+    "loss_omega": 0.5282204821705818,
+    "loss_validity": 0.552337380250295,
+    "mae_lambda_ep": 0.22219159851314893,
+    "mae_omega_log": 44.91413964432998,
+    "mae_tc_bare_formula": 2.213352680206299,
+    "mae_tc_f1_corrected_formula": 2.3180618286132812
+  },
+  "f2_auxiliary_ground_truth_only": {
+    "note": "NOT a model-prediction evaluation -- computed entirely from ground-truth lambda_ep/omega_log/omega2 on the subset of test rows with a reliable raw alpha^2F spectrum, to illustrate f2's potential magnitude. omega2 was reconstructed from a2f_original_{x,y} via omega2 = sqrt(2*integral(a2F*w dw) / lambda_check), lambda_check = 2*integral(a2F/w dw), keeping rows where lambda_check matches the stored lambda_ep within 30% (33 of 48 has_a2f_spectrum=True rows passed this filter).",
+    "n_rows": 33,
+    "mean_tc_bare_K": 4.365387439727783,
+    "mean_tc_f1_only_K": 4.728567600250244,
+    "mean_tc_f1_times_f2_K": 1.9820034503936768,
+    "mean_abs_f2_effect_K": 2.7465643882751465
+  }
+}

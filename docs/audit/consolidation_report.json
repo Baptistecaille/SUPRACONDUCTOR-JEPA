@@ -1,0 +1,58 @@
+{
+  "description": "Composition-level consolidation of 4 raw sources into one wide property table.",
+  "sources": {
+    "superband": {
+      "raw_rows": 8625,
+      "unique_compositions_used": 3964,
+      "role": "experimental Tc (highest priority CIF + Tc label)"
+    },
+    "materials_project": {
+      "raw_rows": 80769,
+      "unique_compositions_used": 57017,
+      "role": "pretraining corpus CIFs / formation energy fallback"
+    },
+    "jarvis_dft": {
+      "raw_rows": 93902,
+      "unique_compositions_used": 65320,
+      "role": "electronic/magnetic/mechanical/Tc_DFT (OptB88vdW + TBmBJ + HSE06)"
+    },
+    "alexandria_pbesol": {
+      "raw_rows": 415419,
+      "unique_compositions_used": 276461,
+      "role": "thermo/electronic/magnetic scale-up (PBEsol)"
+    }
+  },
+  "dedup_method": "Composition key = sorted, fractional-amount-normalized element:fraction string derived from each CIF's own _chemical_formula_sum (pymatgen Composition.fractional_composition), NOT the raw source formula string. Within each source, rows sharing a composition_key are collapsed to one representative row (lowest e_above_hull / ef_per_atom as the stability tie-break; superband/3DSC kept by lowest superband_id since Tc is an experimental measurement, not DFT-derived).",
+  "canonical_cif_priority": [
+    "superband (experimental)",
+    "materials_project",
+    "jarvis_dft",
+    "alexandria_pbesol"
+  ],
+  "total_unique_compositions": 312149,
+  "n_sources_histogram": {
+    "1": 252711,
+    "2": 29229,
+    "3": 29243,
+    "4": 966
+  },
+  "cif_source_histogram": {
+    "alexandria_pbesol": 223898,
+    "materials_project": 55904,
+    "jarvis_dft": 28383,
+    "superband": 3964
+  },
+  "cross_source_composition_overlap": {
+    "jarvis_\u2229_alexandria": 44974,
+    "jarvis_\u2229_mp": 36902,
+    "alexandria_\u2229_mp": 37539,
+    "all_three_dft_sources": 30058,
+    "jarvis_tc_\u2229_superband": 63
+  },
+  "dft_heterogeneity_warning": "This table mixes AT LEAST 4 distinct levels of theory: OptB88vdW/TBmBJ/HSE06 (JARVIS-DFT), PBEsol (Alexandria), PBE/PBE+U (Materials Project, functional not tracked per-row in the original mp.csv.gz export), and experimental measurement (SuperBand Tc). The 'best available' columns (thermo_formation_energy_peratom, electronic_bandgap_best, magnetic_total_moment_best) pick ONE value per row by source-priority fallback for convenience, but per-source columns are always kept so downstream training/eval code can filter to a single consistent functional when precision matters (e.g. do not train a regressor mixing OptB88vdW and PBEsol band gaps as if they were one measurement).",
+  "known_limitations": [
+    "mechanical_* (bulk/shear modulus, poisson) coverage is only ~6-7% -- exclusively from JARVIS-DFT; Alexandria and MP contribute none.",
+    "tc_experimental coverage is 1.27% (3,964 compositions) vs. 95%+ for thermo/electronic -- severe volumetric imbalance across property domains, as previously flagged in the dataset landscape audit.",
+    "tc_dft_predicted (JARVIS Tc_supercon) covers only 659 of the 312,149 compositions and overlaps the experimental Tc set in only ~63 compositions -- it is a weak, mostly-independent signal, not a substitute for experimental Tc."
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "input_rows_superband_mp_matched": 4013,
+  "rows_removed_composition_leak_vs_pretrain": 1155,
+  "rows_after_leak_filter": 2858,
+  "duplicate_composition_rows_removed": 7,
+  "unique_compositions_final_pool": 2851,
+  "split_sizes": {
+    "train": 1995,
+    "val": 428,
+    "test": 428
+  },
+  "split_tc_stats": {
+    "train": {
+      "count": 1995.0,
+      "mean": 18.214491228070173,
+      "std": 23.45076231893787,
+      "min": 0.01,
+      "25%": 3.175,
+      "50%": 8.77,
+      "75%": 22.0,
+      "max": 132.9
+    },
+    "val": {
+      "count": 428.0,
+      "mean": 18.430257009345794,
+      "std": 23.796184837371587,
+      "min": 0.01,
+      "25%": 3.0,
+      "50%": 8.73,
+      "75%": 23.525,
+      "max": 126.0
+    },
+    "test": {
+      "count": 428.0,
+      "mean": 17.78032710280374,
+      "std": 22.524306649854676,
+      "min": 0.02,
+      "25%": 3.2150000000000003,
+      "50%": 8.7,
+      "75%": 22.75,
+      "max": 130.0
+    }
+  },
+  "composition_disjoint_verified": true,
+  "pretraining_exclusion_list_rows": 0,
+  "random_seed": 42,
+  "stratify_variable": "log10(tc) decile",
+  "note_supersedes": "Supersedes data/processed/superband_mp_matched_no_train_leak.csv (401 rows, id-only leak filter) and superband_mp_matched_no_3dsc_formula.csv (128 rows, exact-formula-string filter, self-reported incomplete)."
+}

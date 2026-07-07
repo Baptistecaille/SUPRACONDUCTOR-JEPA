@@ -1,0 +1,13 @@
+model:
+  attn_head: 16
+  dropout: 0.0
+  hidden_dim: 512
+  layers: 8
+training:
+  batch_size: 2048
+  epochs: 2000
+  lr: 0.0001
+use_gradscalar: true
+use_schedule: true
+wandb:
+  project: crys_jepa

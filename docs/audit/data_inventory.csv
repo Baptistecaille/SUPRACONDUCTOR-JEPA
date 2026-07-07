@@ -1,0 +1,13 @@
+path,exists,size,note
+data/jepa/mp.csv,True,107.1MB,"Redundant plaintext duplicate of mp.csv.gz — 92,762 rows, identical material_id set"
+data/jepa/mp.csv.gz,True,16.5MB,Primary JEPA pretraining corpus (gzip CSV)
+data/raw/3DSC_MP.csv,True,9.0MB,"3DSC_MP reference dataset (5,773 rows after header comment), used to build Tc-matched set"
+data/raw/superband.csv,True,972.1KB,"Raw SuperBand Tc measurements, 8,625 rows"
+data/raw/cifs,True,14.0MB,"10,904 loose synthetic-doped CIF files (3DSC_MP source CIFs, referenced by data/raw/3DSC_MP.csv 'cif' column paths)"
+data/raw/3DSC_MP/MP,True,163.0B,Contains only a macOS AppleDouble junk file (._cifs) — effectively empty
+data/SuperBand,True,21.4MB,Git submodule/clone of github.com/ljcj007/SuperBand — cif/ has 32 local CIFs + README
+data/processed/superband_mp_matched.csv,True,5.5MB,"SuperBand x 3DSC_MP composition-matched, 4,013 rows, no leak filtering"
+data/processed/superband_mp_matched_no_3dsc_formula.csv,True,165.3KB,"Legacy leak-filter attempt (exact-formula-string mode) — 128 rows, self-reported incomplete"
+data/processed/superband_mp_matched_no_train_leak.csv,True,622.8KB,"Current Tc-labeled set used downstream — 401 rows, filtered only by mp_material_id not in mp.csv.gz"
+data/processed/superband_mp_matched_report.json,True,446.0B,Report for matched.csv build
+data/processed/superband_mp_matched_no_3dsc_formula_report.json,True,503.0B,Report for legacy exact-formula filter

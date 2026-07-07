@@ -1,0 +1,20 @@
+dataset:
+  max_atoms: 20
+  max_types: 100
+  num_workers: 64
+  primitive: true
+diffusion:
+  timesteps: 256
+model:
+  attn_head: 8
+  decoder_layers: 12
+  dropout: 0.01
+  hidden_dim: 1024
+training:
+  batch_size: 256
+  epoch: 16000
+  lr: 0.0001
+use_gradscalar: true
+use_schedule: true
+wandb:
+  project: crys_jepa

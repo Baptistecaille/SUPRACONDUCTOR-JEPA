@@ -19,18 +19,18 @@ PROPERTY_TYPES: tuple[str, ...] = (
     "formation_energy_peratom",
     "e_above_hull",
     "e_phase_separation",
-    "bandgap_optb88vdw",
-    "bandgap_mbj",
     "bandgap_hse",
     "dos_ef",
     "magmom_total",
-    "bulk_modulus_kv",
-    "shear_modulus_gv",
-    "poisson_ratio",
-    "elastic_tensor_max",
     "tc_experimental",
     "tc_dft_predicted",
 )
+# The following canonical types were retired on 2026-07-06: each had fewer
+# than 100 evaluation queries in `evaluate_property_jepa.py` (`bandgap_optb88vdw`
+# 86, `bandgap_mbj` 10, `bulk_modulus_kv` 31, `shear_modulus_gv` 31,
+# `poisson_ratio` 31, `elastic_tensor_max` 35) -- too little held-out signal to
+# trust the reported per-property loss. Re-add here (and to
+# `data/dataset.py::PROPERTY_COLUMNS`) if label coverage improves.
 
 NUM_PROPERTY_TYPES = len(PROPERTY_TYPES)
 
